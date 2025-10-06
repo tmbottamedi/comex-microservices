@@ -6,6 +6,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -48,5 +49,20 @@ public class AuthController {
         usuarioService.save(login, senha);
 
         return HttpStatus.CREATED;
+    }
+
+    @PostMapping("/validate")
+    public ResponseEntity<String> validateToken(
+            @RequestHeader(name = "Authorization", required = true) String authorizationHeader) {
+        try {
+            String subject = tokenService.getSubject(authorizationHeader);
+            if (subject != null) {
+                return ResponseEntity.ok().body("Token é  válido");
+            } else {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Token é inválido");
+            }
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Token é inválido");
+        }
     }
 }
