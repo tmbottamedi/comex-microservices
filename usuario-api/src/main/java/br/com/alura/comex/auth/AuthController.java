@@ -1,5 +1,8 @@
 package br.com.alura.comex.auth;
 
+import java.time.Instant;
+
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -10,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import br.com.alura.comex.producer.UsuarioFallback;
+import br.com.alura.comex.producer.dto.MensagemEnum;
 import br.com.alura.comex.security.DadosTokenJWT;
 import br.com.alura.comex.usuario.Usuario;
 import br.com.alura.comex.usuario.UsuarioService;
@@ -25,10 +30,17 @@ public class AuthController {
 
     private final UsuarioService usuarioService;
 
-    public AuthController(AuthenticationManager manager, TokenService tokenService, UsuarioService usuarioService) {
+    private final RabbitTemplate rabbitTemplate;
+
+    private static final String EXCHANGE_USERS = "usuario-login-exchange";
+    private static final String RK_USERS_CREATED = "usuario-login";
+
+    public AuthController(AuthenticationManager manager, TokenService tokenService, UsuarioService usuarioService,
+            RabbitTemplate rabbitTemplate) {
         this.manager = manager;
         this.tokenService = tokenService;
         this.usuarioService = usuarioService;
+        this.rabbitTemplate = rabbitTemplate;
     }
 
     @PostMapping
@@ -37,6 +49,9 @@ public class AuthController {
         var authentication = manager.authenticate(authenticationToken);
 
         var tokenJWT = tokenService.gerarToken((Usuario) authentication.getPrincipal());
+
+        rabbitTemplate.convertAndSend(EXCHANGE_USERS, RK_USERS_CREATED,
+                new UsuarioFallback(dados.login(), tokenJWT, true, MensagemEnum.AUTH, Instant.now()));
 
         return ResponseEntity.ok(new DadosTokenJWT(tokenJWT));
     }
@@ -57,7 +72,7 @@ public class AuthController {
         try {
             String subject = tokenService.getSubject(authorizationHeader);
             if (subject != null) {
-                return ResponseEntity.ok().body("Token é  válido");
+                return ResponseEntity.ok().body("Token é válido");
             } else {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Token é inválido");
             }
